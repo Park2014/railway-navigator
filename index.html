@@ -1,63 +1,196 @@
 
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>철도미래 내비게이터</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Pretendard', sans-serif;
-            background-color: #f8fafc;
-        }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
-  }
-}
-</script>
-</head>
-<body>
-    <div id="root"></div>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>철도미래 내비게이터</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Pretendard', sans-serif;
-            background-color: #f8fafc;
-        }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
-  }
-}
-</script>
-</head>
-<body>
-    <div id="root"></div>
-</body>
-</html>
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Message } from './types';
+import { GeminiService } from './services/geminiService';
+import ChatMessage from './components/ChatMessage';
+import QuickActions from './components/QuickActions';
+
+const App: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showShareTooltip, setShowShareTooltip] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const geminiRef = useRef<GeminiService | null>(null);
+
+  useEffect(() => {
+    geminiRef.current = new GeminiService();
+    
+    const welcome: Message = {
+      id: 'welcome',
+      role: 'model',
+      text: "반갑습니다, 철도대학 학생 여러분! 🚆\n\n최신 2025년 철도 산업 트렌드와 채용 소식을 바탕으로 여러분의 진로를 함께 고민하는 '철길 멘토'입니다. 실시간 검색을 통해 가장 정확하고 빠른 정보를 드릴게요.\n\n궁금한 직무나 최근 채용 이슈에 대해 무엇이든 물어보세요!",
+      timestamp: new Date(),
+    };
+    setMessages([welcome]);
+  }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = useCallback(async (text: string) => {
+    if (!text.trim() || isLoading || !geminiRef.current) return;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      text,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      const response = await geminiRef.current.sendMessage(text);
+      const modelMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: response || '죄송합니다. 정보를 가져오는 중 오류가 발생했습니다.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (error) {
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: '네트워크 연결 상태를 확인해주시고 다시 시도해주세요.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading]);
+
+  const copyAppUrl = () => {
+    const shareText = `[철도미래 내비게이터] 철도대학 학생들을 위한 AI 진로 상담 챗봇을 이용해보세요!\n${window.location.href}`;
+    navigator.clipboard.writeText(shareText);
+    setShowShareTooltip(true);
+    setTimeout(() => setShowShareTooltip(false), 2000);
+  };
+
+  const copyFullConversation = () => {
+    const fullText = messages
+      .map(m => `[${m.role === 'model' ? '멘토' : '학생'}] ${m.text}`)
+      .join('\n\n---\n\n');
+    navigator.clipboard.writeText(fullText);
+    alert('전체 상담 내용이 복사되었습니다. 메모장에 붙여넣어 보관하세요!');
+  };
+
+  return (
+    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-slate-50 shadow-xl overflow-hidden">
+      {/* Header */}
+      <header className="bg-blue-900 text-white p-4 shadow-md flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-900 shadow-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-blue-800">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="font-bold text-lg leading-tight">철도미래 내비게이터</h1>
+            <p className="text-xs text-blue-200">실시간 정보 기반 AI 진로 상담실</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={copyAppUrl}
+            className="relative p-2 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors border border-blue-700"
+            title="앱 링크 공유하기"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+            </svg>
+            {showShareTooltip && (
+              <span className="absolute -bottom-10 right-0 bg-green-600 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap shadow-lg animate-fade-in">링크가 복사되었습니다!</span>
+            )}
+          </button>
+          <button 
+            onClick={copyFullConversation}
+            className="p-2 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors border border-blue-700"
+            title="상담 내용 전체 저장"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* Main Chat Area */}
+      <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="mb-6 text-center">
+          <span className="inline-block bg-slate-200 text-slate-500 text-[10px] px-3 py-1 rounded-full uppercase tracking-tighter">
+            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+        
+        {messages.map((msg) => (
+          <ChatMessage key={msg.id} message={msg} />
+        ))}
+        
+        {isLoading && (
+          <div className="flex justify-start mb-4">
+            <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-.3s]"></div>
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-.5s]"></div>
+                </div>
+                <span className="text-xs text-slate-400 animate-pulse">최신 정보를 검색 중입니다...</span>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </main>
+
+      {/* Input Area */}
+      <div className="bg-white border-t border-slate-200 p-4">
+        <QuickActions onSelect={handleSend} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend(input);
+          }}
+          className="flex items-center gap-2"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="2025년 채용 일정이나 궁금한 점을 물어보세요..."
+            className="flex-1 border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            disabled={isLoading}
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50 shadow-lg shadow-blue-100"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+          </button>
+        </form>
+        <div className="flex justify-between items-center mt-3">
+           <p className="text-[9px] text-slate-400">
+            &copy; 2024-2025 철도대학 AI 진로상담 시스템 | 실시간 정보 기반
+          </p>
+          <button 
+            onClick={copyFullConversation}
+            className="text-[10px] text-blue-500 font-medium hover:underline"
+          >
+            상담 내용 전체 복사하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
